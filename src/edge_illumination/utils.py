@@ -6,6 +6,7 @@ from scipy.interpolate import griddata
 # Definition of constants
 SIN_METHOD = 'sin_method'
 FOURIER_METHOD = 'fourier_method'
+INTENSITIES = 'intensities'
 
 # Disabling library logs
 from ei_logger import disable_loggers
@@ -304,3 +305,30 @@ def convolution(image,kernel_cold, kernel_hot, selective=False, stds_cold=1, std
                     result2[i,j] = np.sum(multiplication)
         result2 = deppading(result2,excess_hot)
         return result2
+
+def profile_pixel(images,i,j):
+    """
+    Returns the pixel profile in the i,j position for all images
+    params:
+    images: Set of images to be profiled
+    i: X position of pixel
+    j: Y position of pixel
+    returns:
+    array of points in the [i,j] for all images
+    """
+    points = []
+    for image in images:
+        points.append(image[i,j])
+    return points
+
+def correct_dead_pixels(images, dim_x=256, dim_y=256):
+    """
+    Corrects dead pixels in the image and sets them as the mean of the image
+    params:
+    """
+    for img in images: 
+        mean = np.mean(img)
+        for i in range(dim_x):
+            for j in range(dim_y):
+                if img[i,j] == 0:
+                    img[i,j] = mean
