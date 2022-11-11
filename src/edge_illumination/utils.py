@@ -3,10 +3,14 @@ import numpy as np
 from scipy.optimize import curve_fit
 from scipy.interpolate import griddata
 
-# Definition of constants
+# Definition of constants: method to use
 SIN_METHOD = 'sin_method'
-FOURIER_METHOD = 'fourier_method'
+FOURIER_METHOD = 'fourier_method' # Aka TUM method
 INTENSITIES = 'intensities'
+
+# Definition of constants for dead pixel correction
+MEAN = 'mean'
+CONVOLUTIONS = 'convolutions'
 
 # Disabling library logs
 from ei_logger import disable_loggers
@@ -306,6 +310,24 @@ def convolution(image,kernel_cold, kernel_hot, selective=False, stds_cold=1, std
         result2 = deppading(result2,excess_hot)
         return result2
 
+def correct_dead_pixels(images, dim_x=256, dim_y=256):
+    """
+    Corrects dead pixels in the image and sets them as the mean of the image
+    params:
+    images: images to which the dead pixel method will be applied
+    dim_x: x dimension of the images
+    dim_y: y dimension of the images
+    returns:
+    images with their dead pixels corrected to the mean value
+    """
+    for img in images: 
+        mean = np.mean(img)
+        for i in range(dim_x):
+            for j in range(dim_y):
+                if img[i,j] == 0:
+                    img[i,j] = mean
+
+
 def profile_pixel(images,i,j):
     """
     Returns the pixel profile in the i,j position for all images
@@ -320,15 +342,3 @@ def profile_pixel(images,i,j):
     for image in images:
         points.append(image[i,j])
     return points
-
-def correct_dead_pixels(images, dim_x=256, dim_y=256):
-    """
-    Corrects dead pixels in the image and sets them as the mean of the image
-    params:
-    """
-    for img in images: 
-        mean = np.mean(img)
-        for i in range(dim_x):
-            for j in range(dim_y):
-                if img[i,j] == 0:
-                    img[i,j] = mean
