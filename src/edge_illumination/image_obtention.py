@@ -46,25 +46,36 @@ else:
     # Path that will contain the grid images
     grid_images_path = os.path.join(output_dir, '/grid_images')
     # Path that will contain the illumination curves for the images without sample
-    illumination_curves_ns_path = os.path.join(output_dir, '/illumination_curves_ns')
+    illumination_curves_ns_path = os.path.join(output_dir, '/illumination_curves_no_sample')
+    # Path that will contain the illumination curves for the images with sample
+    illumination_curves_sample_path = os.path.join(output_dir, '/illumination_curves_sample')
     # Path that contains the absorption images 
     absorption_path = os.path.join(output_dir, '/absorption')
 
     # Creating the directories
     if not os.path.exists(output_dir): 
         os.makedirs(output_dir)
-        if not os.path.exists(grid_images_path):
+        if args.save_aux_plots and not os.path.exists(grid_images_path):
+            logger.info(f'Creating directory {grid_images_path}')
             os.makedirs(grid_images_path)
-        if not os.path.exists(illumination_curves_ns_path):
+        if args.save_aux_plots and not os.path.exists(illumination_curves_ns_path):
+            logger.info(f'Creating directory {illumination_curves_ns_path}')
             os.makedirs(illumination_curves_ns_path)
-    
-
+        if args.save_aux_plots and not os.path.exists(illumination_curves_sample_path):
+            logger.info(f'Creating directory {illumination_curves_sample_path}')
+            os.makedirs(illumination_curves_sample_path)
+        if not os.path.exists(absorption_path):
+            logger.info(f'Creating directory {absorption_path}')
+            os.makedirs(absorption_path)
+        
     # Generating grid images
     logger.info(f'Reading flat-field images from {ff_dir} and generating grid images')
     images = []
     # -------------------------------------- FLAT-FIELD IMAGES -------------------------------------------
+    # Reading flat field images
     names = [os.path.join(ff_dir, f) for f in os.listdir(ff_dir) if f.endswith('.txt')]
     for name in names:
+        # Applying necessary rotations to images
         img = np.rot90(np.genfromtxt(os.path.join(ff_dir, name)),1)
         images.append(img)
         if args.save_aux_plots:
@@ -74,7 +85,7 @@ else:
             plt.savefig(grid_filename)
     images = np.array(images)
 
-    # Correcting dead pixels for FF images
+    # Correcting dead pixels for Flat field images images
     if args.dead_pixel_method == MEAN:
         logger.info('Correcting dead pixels to the mean value of the image for Flat Field images')
         correct_dead_pixels(images)
@@ -87,14 +98,14 @@ else:
                 raise Exception('If convolutions method is provided, --selective flag should be provided.')
     
     # Generating the illumination curves for all pixels in all Flat Field images.
-    ic_nosample_file = open("illumination_curve_data_no_sample.txt", "w")
-    ic_nosample_params_file = open("illumination_curve_params_no_sample.txt", "w")
+    ic_nosample_file = open(os.path.join(output_dir, "illumination_curve_data_no_sample.txt"), "w")
+    ic_nosample_params_file = open(os.path.join(output_dir,"illumination_curve_params_no_sample.txt"), "w")
     if args.method == FOURIER_METHOD:
-        ic_nosample_params_file.write('i,j,amplitude,phase shift, mean value')
+        ic_nosample_params_file.write('i,j,amplitude,phase_shift,mean_value')
     else:
         # Refer to sin(x,a,b,c,d) function documentation to view the value of each parameter
         ic_nosample_params_file.write('i,j,a,b,c,d')
-    logger.info('Generating the illumination curve data for all pixels')
+    logger.info('Generating the illumination curve data for all pixels in Flat Field Images')
     logger.info('Adjusting data to {args.method} method')
     illum_curves_nosample = []
     datos_fits_ns = []
@@ -125,7 +136,7 @@ else:
                 plt.xlabel('# of image')
                 plt.ylabel('Intensity')
                 ic_ns_filename = os.path.join(illumination_curves_ns_path, f'illumination_curve_no_sample_{i}_{j}.pdf')
-                logger.info(f'Saving grid image {i},{j} in {ic_ns_filename}')
+                logger.info(f'Saving illumination curve for pixel {i},{j} in {ic_ns_filename}')
             if i%10 == 0 and j%10 == 0: logger.info(f'Finished processing image {i}, {j}')
     ic_nosample_file.close()
     ic_nosample_params_file.close()
@@ -161,9 +172,55 @@ else:
     for img in images_sample:
         plt.imshow(img, cmap="bone")
         abs_filename = os.path.join(absorption_path, f'absorption_{name[4:-4]}.pdf')
-        logger.info(f'Saving grid image for {name} in {abs_filename}')
+        logger.info(f'Saving absorption image for {name} in {abs_filename}')
         plt.savefig(abs_filename)
-    # Generating the illumination curves for all pixels in all Flat Field images.
-    # TODO: Aqui estoy --> Edge Illumination curves for RAW images.
+    # Generating the illumination curves for all pixels in all Raw images.
+    ic_sample_file = open(os.path.join(output_dir, "illumination_curve_data_sample.txt"), "w")
+    ic_sample_params_file = open(os.path.join(output_dir,"illumination_curve_params_sample.txt"), "w")
+    if args.method == FOURIER_METHOD:
+        ic_sample_params_file.write('i,j,amplitude,phase_shift,mean_value')
+    else:
+        # Refer to sin(x,a,b,c,d) function documentation to view the value of each parameter
+        ic_sample_params_file.write('i,j,a,b,c,d')
+    logger.info('Generating the illumination curve data for all pixels in Raw Images')
+    logger.info('Adjusting data to {args.method} method')
+    illum_curves_sample = []
+    datos_fits_s = []
+    for i in range(256):
+        for j in range(256):
+            # Getting the profile of each pixel (i.e. intensity)
+            points = profile_pixel(images_sample,i,j)
+            illum_curves_sample.append(points)
+            # Writing the intensity for all images in the pixel i,j
+            ic_sample_file.write(','.join([str(i),str(j),str(len(points)),','.join(str(p) for p in points)]))
+            if args.method == FOURIER_METHOD:
+                # Calculate the amplitude, phase_shift, and mean_value from fit function
+                amplitude, phase_shift, mean_value = fit(illum_curves_sample,i,j)
+                ic_sample_params_file.write(','.join([str(i), str(j), str(amplitude), str(phase_shift), str(mean_value)])) 
+            else:
+                # Calculate the constants for the sine fit function
+                a, b, c, d = fit(illum_curves_sample,i,j)
+                ic_sample_params_file.write(','.join([str(i), str(j), str(a), str(b), str(c), str(d)])) 
+            datos_fits_s.append(fit(illum_curves_sample,i,j))
+            # Saving the edge illumination curves to a directory
+            if args.save_aux_plots:
+                xdata = np.linspace(0, 2*np.pi, 100)
+                plt.scatter(illum_curves_sample[i,j], c='lightpink')
+                if args.method == FOURIER_METHOD:
+                    plt.plot(xdata* len(images) / (2 * np.pi), func_fourier(xdata, amplitude, phase_shift, mean_value))
+                else:
+                    plt.plot(xdata, sin(xdata, a, b, c, d))
+                plt.xlabel('# of image')
+                plt.ylabel('Intensity')
+                ic_s_filename = os.path.join(illumination_curves_sample_path, f'illumination_curve_sample_{i}_{j}.pdf')
+                logger.info(f'Saving illumination curve for pixel {i},{j} in {ic_s_filename}')
+            if i%10 == 0 and j%10 == 0: logger.info(f'Finished processing pixel {i}, {j}')
+    ic_sample_file.close()
+    ic_sample_params_file.close()
 
+    illum_curves_sample = np.array(illum_curves_sample)
+    illum_curves_sample = illum_curves_sample.reshape((256,256,len(names)))
+    datos_fits_s = np.array(datos_fits_s)
+    datos_fits_s = datos_fits_s.reshape((256,256,3 if args.method == FOURIER_METHOD else 4))
 
+    # TODO: Is it important to add both edge illumination curves (w/o sample, w/ sample) together?
