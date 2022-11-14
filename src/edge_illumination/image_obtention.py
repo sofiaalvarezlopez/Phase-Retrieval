@@ -223,4 +223,4 @@ else:
     datos_fits_s = np.array(datos_fits_s)
     datos_fits_s = datos_fits_s.reshape((256,256,3 if args.method == FOURIER_METHOD else 4))
 
-    # TODO: Is it important to add both edge illumination curves (w/o sample, w/ sample) together?
+    # 
